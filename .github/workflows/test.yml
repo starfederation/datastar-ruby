@@ -1,0 +1,60 @@
+name: Test Ruby Gem with Rack App
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.3.5
+        bundler-cache: true
+    
+    - name: Install dependencies
+      run: |
+        bundle install
+        gem install bundler
+    
+    - name: Run unit tests
+      run: bundle exec rspec
+    
+    - name: Start Rack test app
+      run: |
+        # Start the test app in background on port 9292
+        bundle exec puma examples/test.ru &
+        
+        # Store the PID for cleanup
+        echo $! > rack_app.pid
+        
+        # Wait for the app to start
+        sleep 5
+        
+        # Verify the app is running
+        curl -f http://localhost:9292/ || (echo "App failed to start" && exit 1)
+      
+    - name: Run integration tests
+      run: |
+        curl -f http://localhost:9292/ || (echo "App failed to start" && exit 1)
+        # Make the test script executable
+        # chmod +x test/integration_test.rb
+        
+        # Run the integration tests
+        # ruby test/integration_test.rb
+      env:
+        TEST_APP_URL: http://localhost:9292
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        # Kill the Rack app if it's still running
+        if [ -f rack_app.pid ]; then
+          kill $(cat rack_app.pid) 2>/dev/null || true
+          rm rack_app.pid
+        fi
