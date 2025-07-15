@@ -1,0 +1,65 @@
+name: Test Ruby Gem with Rack App
+
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        ruby-version: 3.3.5
+        bundler-cache: true
+    
+    - name: Install dependencies
+      run: |
+        bundle install
+        gem install bundler
+    
+    - name: Run unit tests
+      run: bundle exec rspec
+    
+    - name: Start Rack test app
+      run: |
+        # Start the test app in background on port 8000
+        bundle exec puma -p 8000 examples/test.ru &
+        
+        # Store the PID for cleanup
+        echo $! > rack_app.pid
+        
+        # Wait for the app to start
+        sleep 3
+        
+        # Verify the app is running
+        curl -f http://localhost:8000/ || (echo "App failed to start" && exit 1)
+
+    - name: Checkout datastar repository
+      uses: actions/checkout@v4
+      with:
+        repository: starfederation/datastar
+        ref: develop
+        path: datastar
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache-dependency-path: datastar/sdk/tests
+
+    - name: Run SDK tests against test server
+      working-directory: datastar/sdk/tests
+      run: go run ./cmd/datastar-sdk-tests -server http://localhost:8000 
+
+    - name: Cleanup
+      if: always()
+      run: |
+        # Kill the Rack app if it's still running
+        if [ -f rack_app.pid ]; then
+          kill $(cat rack_app.pid) 2>/dev/null || true
+          rm rack_app.pid
+        fi

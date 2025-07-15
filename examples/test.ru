@@ -32,7 +32,7 @@ run do |env|
   end
 
   datastar.stream do |sse|
-    sse.signals['events'].each do |event|
+    (sse.signals['events'] || []).each do |event|
       type = event.delete('type')
       case type
       when 'patchSignals'
