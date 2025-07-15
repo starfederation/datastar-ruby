@@ -41,8 +41,8 @@ jobs:
     - name: Checkout datastar repository
       uses: actions/checkout@v4
       with:
-        repository: gazpachoking/datastar
-        ref: fix-go-sdk-tests
+        repository: ismasan/datastar
+        ref: go_sdk_tests
         path: datastar
 
     - name: Set up Go
