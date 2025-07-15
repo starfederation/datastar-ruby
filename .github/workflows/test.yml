@@ -2,7 +2,6 @@ name: Test Ruby Gem with Rack App
 
 on:
   push:
-  pull_request:
 
 jobs:
   test:
@@ -27,29 +26,35 @@ jobs:
     
     - name: Start Rack test app
       run: |
-        # Start the test app in background on port 9292
-        bundle exec puma examples/test.ru &
+        # Start the test app in background on port 8000
+        bundle exec puma -p 8000 examples/test.ru &
         
         # Store the PID for cleanup
         echo $! > rack_app.pid
         
         # Wait for the app to start
-        sleep 5
+        sleep 3
         
         # Verify the app is running
-        curl -f http://localhost:9292/ || (echo "App failed to start" && exit 1)
-      
-    - name: Run integration tests
-      run: |
-        curl -f http://localhost:9292/ || (echo "App failed to start" && exit 1)
-        # Make the test script executable
-        # chmod +x test/integration_test.rb
-        
-        # Run the integration tests
-        # ruby test/integration_test.rb
-      env:
-        TEST_APP_URL: http://localhost:9292
-    
+        curl -f http://localhost:8000/ || (echo "App failed to start" && exit 1)
+
+    - name: Checkout datastar repository
+      uses: actions/checkout@v4
+      with:
+        repository: gazpachoking/datastar
+        ref: fix-go-sdk-tests
+        path: datastar
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.22'
+        cache-dependency-path: datastar/sdk/tests
+
+    - name: Run SDK tests against test server
+      working-directory: datastar/sdk/tests
+      run: go run ./cmd/datastar-sdk-tests -server http://localhost:8000 
+
     - name: Cleanup
       if: always()
       run: |
