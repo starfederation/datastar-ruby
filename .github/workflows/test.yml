@@ -16,11 +16,6 @@ jobs:
         ruby-version: 3.3.5
         bundler-cache: true
     
-    - name: Install dependencies
-      run: |
-        bundle install
-        gem install bundler
-    
     - name: Run unit tests
       run: bundle exec rspec
     
