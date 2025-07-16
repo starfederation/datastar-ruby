@@ -160,7 +160,7 @@ sse.execute_script(%(alert('Hello World!')), auto_remove: false)
 ```
 
 #### `signals`
-See https://data-star.dev/guide/getting_started#data-signals
+See https://data-star.dev/guide/reactive_signals
 
 Returns signals sent by the browser.
 
