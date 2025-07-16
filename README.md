@@ -348,13 +348,14 @@ bundle install
 From this library's root, run the bundled-in test Rack app:
 
 ```bash
-bundle puma examples/test.ru
+bundle puma -p 8000 examples/test.ru
 ```
 
-Now run the test bash scripts in the `sdk/test` directory in this repo.
+From the main [Datastar](https://github.com/starfederation/datastar) repo (you'll need Go installed)
 
 ```bash
-./test-all.sh http://localhost:9292
+cd sdk/tests
+go run ./cmd/datastar-sdk-tests -server http://localhost:8000 
 ```
 
 ## Development
