@@ -34,27 +34,20 @@ PROGRESS = <<~JAVASCRIPT
           return this._progress;
       }
 
-      set progress(value) {
-          const numValue = Math.max(0, Math.min(100, parseFloat(value) || 0));
-          this._progress = numValue;
-          this.setAttribute('progress', numValue.toString());
-          this.updateProgress();
-      }
-
       attributeChangedCallback(name, oldValue, newValue) {
           if (name === 'progress' && oldValue !== newValue) {
               this._progress = Math.max(0, Math.min(100, parseFloat(newValue) || 0));
               this.updateProgress();
           }
-      }
+     }
 
       connectedCallback() {
           this.render();
-          this.updateProgress();
       }
 
       render() {
           this.shadowRoot.innerHTML = `
+              <slot></slot>
               <svg
                   width="200"
                   height="200"
@@ -232,6 +225,9 @@ INDEX = <<~HTML
         .a-item.done .time {
             color: #5a8a6a;
         }
+        #title {
+          text-align: center;
+        }
       </style>
       <script type="module">#{PROGRESS}</script>
       <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@release-candidate/bundles/datastar.js"></script>
@@ -284,7 +280,7 @@ run do |env|
       sse.patch_elements(%(<div id="activity" class="col"></div>))
 
       # step 1: add the initial progress component to the DOM
-      sse.patch_elements(%(<circular-progress id="work" data-bind-progress data-attr-progress="$progress"></circular-progress>))
+      sse.patch_elements(%(<circular-progress id="work" data-bind-progress data-attr-progress="$progress"><h1 id="title">Processing...</h1></circular-progress>))
 
       # step 2: simulate work and update the progress signal
       0.upto(100) do |i|
@@ -295,6 +291,7 @@ run do |env|
       # step 3: update the DOM to indicate completion
       # sse.patch_elements(%(<p id="work">Done!</p>))
       sse.patch_elements(%(<div class="a-item done"><span class="time">#{Time.now.iso8601}</span>Done!</div>), selector: '#activity', mode: 'append')
+      sse.patch_elements(%(<h1 id="title">Done!</h1>))
     end
 
     # A second thread to push activity updates to the UI
