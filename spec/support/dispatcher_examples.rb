@@ -19,6 +19,7 @@ module DispatcherExamples
 
       socket = TestSocket.new
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(socket.open).to be(false)
       expect(socket.lines.size).to eq(2)
       expect(socket.lines[0]).to eq("event: datastar-patch-signals\ndata: signals {\"foo\":\"bar\"}\n\n")
@@ -45,6 +46,7 @@ module DispatcherExamples
 
       socket = TestSocket.new
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(errs.first).to be_a(ArgumentError)
       Thread.report_on_exception = true
     end

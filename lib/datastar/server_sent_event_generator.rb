@@ -24,6 +24,9 @@ module Datastar
 
     attr_reader :signals
 
+    # @param stream [IO, Queue] The IO stream or Queue to write to
+    # @option signals [Hash] A hash of signals (params)
+    # @option view_context [Object] The view context for rendering elements, if applicable.
     def initialize(stream, signals:, view_context: nil)
       @stream = stream
       @signals = signals
