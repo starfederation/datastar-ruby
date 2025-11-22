@@ -1,7 +1,7 @@
 PATH
-  remote: ../../../sdk/ruby
+  remote: ../../..
   specs:
-    datastar (1.0.0.beta.3)
+    datastar (1.0.0)
       json
       logger
       rack (>= 3.1.14)
@@ -9,7 +9,7 @@ PATH
 GEM
   remote: https://rubygems.org/
   specs:
-    json (2.12.2)
+    json (2.16.0)
     logger (1.7.0)
     nio4r (2.7.4)
     puma (6.6.0)

@@ -230,16 +230,16 @@ INDEX = <<~HTML
         }
       </style>
       <script type="module">#{PROGRESS}</script>
-      <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@release-candidate/bundles/datastar.js"></script>
+      <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@1.0.0-RC.6/bundles/datastar.js"></script>
     </head>
     <body>
       <div class="demo-container">
         <div class="col">
           <p>
             <button 
-                data-indicator-_fetching 
-                data-on-click="!$_fetching && @get('/', {openWhenHidden: true})"
-                data-attr-aria-disabled="`${$_fetching}`"
+                data-indicator:_fetching 
+                data-on:click="!$_fetching && @get('/', {openWhenHidden: true})"
+                data-attr:aria-disabled="`${$_fetching}`"
               >Start</button>
           </p>
           <div id="work">
@@ -280,7 +280,7 @@ run do |env|
       sse.patch_elements(%(<div id="activity" class="col"></div>))
 
       # step 1: add the initial progress component to the DOM
-      sse.patch_elements(%(<circular-progress id="work" data-bind-progress data-attr-progress="$progress"><h1 id="title">Processing...</h1></circular-progress>))
+      sse.patch_elements(%(<circular-progress id="work" data-bind:progress data-attr:progress="$progress"><h1 id="title">Processing...</h1></circular-progress>))
 
       # step 2: simulate work and update the progress signal
       0.upto(100) do |i|
