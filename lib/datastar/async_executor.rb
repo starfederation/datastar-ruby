@@ -22,7 +22,9 @@ module Datastar
 
     def new_queue = Async::Queue.new
 
-    def prepare(response); end
+    def prepare(response)
+      response.delete_header 'Connection'
+    end
 
     def spawn(&block)
       Async(&block)
