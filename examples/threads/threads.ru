@@ -26,12 +26,12 @@ INDEX = <<~HTML
           span { font-weight: bold; }
         }
       </style>
-      <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@release-candidate/bundles/datastar.js"></script>
+      <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@1.0.0-RC.6/bundles/datastar.js"></script>
     </head>
     <body>
       <button#{' '}
-        data-on-click="@get('/')"#{' '}
-        data-indicator-heartbeat#{' '}
+        data-on:click="@get('/')"#{' '}
+        data-indicator:heartbeat#{' '}
         >Start</button>
       <p class="counter">Slow thread: <span id="slow">waiting</span></p>
       <p class="counter">Fast thread: <span id="fast">waiting</span></p>
