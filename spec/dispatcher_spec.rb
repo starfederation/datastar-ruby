@@ -2,19 +2,34 @@
 
 class TestSocket
   attr_reader :lines, :open
-  def initialize
+
+  def initialize(open: true)
     @lines = []
-    @open = true
+    @open = open
+    @finish = Thread::Queue.new
   end
 
   def <<(line)
+    raise Errno::EPIPE, 'Socket closed' unless @open
+
     @lines << line
   end
 
-  def close = @open = false
+  def close 
+    @open = false
+    @finish << true
+  end
 
   def split_lines
     @lines.join.split("\n")
+  end
+
+  # Streams run in threads
+  # we can call this to signal the end of the stream
+  # in tests
+  def wait_for_close(&)
+    @finish.pop
+    yield if block_given?
   end
 end
 
@@ -407,6 +422,8 @@ RSpec.describe Datastar::Dispatcher do
       end
 
       dispatcher.response.body.call(socket)
+
+      socket.wait_for_close
       expect(socket.open).to be(false)
       expect(socket.lines.size).to eq(2)
       expect(socket.lines[0]).to eq("event: datastar-patch-elements\ndata: elements <div id=\"foo\">\ndata: elements <span>hello</span>\ndata: elements </div>\n\n")
@@ -448,8 +465,8 @@ RSpec.describe Datastar::Dispatcher do
       block_called = false
       dispatcher.on_client_disconnect { |conn| connected = false }
 
-      socket = TestSocket.new
-      allow(socket).to receive(:<<).with("\n").and_raise(Errno::EPIPE, 'Socket closed')
+      socket = TestSocket.new(open: false)
+      # allow(socket).to receive(:<<).with("\n").and_raise(Errno::EPIPE, 'Socket closed')
 
       dispatcher.stream do |sse|
         sleep 10
@@ -457,6 +474,8 @@ RSpec.describe Datastar::Dispatcher do
       end
 
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
+
       expect(connected).to be(false)
       expect(block_called).to be(false)
     end
@@ -467,8 +486,7 @@ RSpec.describe Datastar::Dispatcher do
       block_called = false
       dispatcher.on_client_disconnect { |conn| connected = false }
 
-      socket = TestSocket.new
-      allow(socket).to receive(:<<).with("\n").and_raise(Errno::EPIPE, 'Socket closed')
+      socket = TestSocket.new(open: false)
 
       dispatcher.stream do |sse|
         sleep 0.001
@@ -496,6 +514,7 @@ RSpec.describe Datastar::Dispatcher do
       end
       socket = TestSocket.new
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
 
       expect(signals['user']['name']).to eq('joe')
     end
@@ -520,10 +539,10 @@ RSpec.describe Datastar::Dispatcher do
       dispatcher.stream do |sse|
         sse.patch_signals(foo: 'bar')
       end
-      socket = TestSocket.new
-      allow(socket).to receive(:<<).and_raise(Errno::EPIPE, 'Socket closed')
+      socket = TestSocket.new(open: false)
       
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(events).to eq([true, false])
     end
 
@@ -536,10 +555,10 @@ RSpec.describe Datastar::Dispatcher do
       dispatcher.stream do |sse|
         sse.check_connection!
       end
-      socket = TestSocket.new
-      allow(socket).to receive(:<<).with("\n").and_raise(Errno::EPIPE, 'Socket closed')
+      socket = TestSocket.new(open: false)
       
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(events).to eq([true, false])
     end
 
@@ -555,6 +574,7 @@ RSpec.describe Datastar::Dispatcher do
       socket = TestSocket.new
       
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(events).to eq([true, false])
     end
 
@@ -570,6 +590,7 @@ RSpec.describe Datastar::Dispatcher do
       allow(socket).to receive(:<<).and_raise(ArgumentError, 'Invalid argument')
       
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(errors.first).to be_a(ArgumentError)
       expect(Datastar.config.logger).to have_received(:error).with(/ArgumentError \(Invalid argument\):/)
     end
@@ -584,6 +605,7 @@ RSpec.describe Datastar::Dispatcher do
         sse.patch_signals(foo: 'bar')
       end
       dispatcher.response.body.call(socket)
+      socket.wait_for_close
       expect(errs.first).to be_a(ArgumentError)
     end
   end
