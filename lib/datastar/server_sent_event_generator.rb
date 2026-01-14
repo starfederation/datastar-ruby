@@ -3,8 +3,45 @@
 require 'json'
 
 module Datastar
+  module ElementPatchMode
+    # Morphs the element into the existing element.
+    OUTER = 'outer'
+
+    # Replaces the inner HTML of the existing element.
+    INNER = 'inner'
+
+    # Removes the existing element.
+    REMOVE = 'remove'
+
+    # Replaces the existing element with the new element.
+    REPLACE = 'replace'
+
+    # Prepends the element inside to the existing element.
+    PREPEND = 'prepend'
+
+    # Appends the element inside the existing element.
+    APPEND = 'append'
+
+    # Inserts the element before the existing element.
+    BEFORE = 'before'
+
+    # Inserts the element after the existing element.
+    AFTER = 'after'
+  end
+
   class ServerSentEventGenerator
     MSG_END = "\n"
+
+    DEFAULT_SSE_RETRY_DURATION = 1000
+    DEFAULT_ELEMENTS_USE_VIEW_TRANSITIONS = false
+    DEFAULT_PATCH_SIGNALS_ONLY_IF_MISSING = false
+
+    SELECTOR_DATALINE_LITERAL = 'selector'
+    MODE_DATALINE_LITERAL = 'mode'
+    ELEMENTS_DATALINE_LITERAL = 'elements'
+    USE_VIEW_TRANSITION_DATALINE_LITERAL = 'useViewTransition'
+    SIGNALS_DATALINE_LITERAL = 'signals'
+    ONLY_IF_MISSING_DATALINE_LITERAL = 'onlyIfMissing'
 
     SSE_OPTION_MAPPING = {
       'eventId' => 'id',
@@ -13,11 +50,13 @@ module Datastar
       'retry' => 'retry',
     }.freeze
 
+    DEFAULT_ELEMENT_PATCH_MODE = ElementPatchMode::OUTER
+
     OPTION_DEFAULTS = {
-      'retry' => Consts::DEFAULT_SSE_RETRY_DURATION,
-      Consts::MODE_DATALINE_LITERAL => Consts::DEFAULT_ELEMENT_PATCH_MODE,
-      Consts::USE_VIEW_TRANSITION_DATALINE_LITERAL => Consts::DEFAULT_ELEMENTS_USE_VIEW_TRANSITIONS,
-      Consts::ONLY_IF_MISSING_DATALINE_LITERAL => Consts::DEFAULT_PATCH_SIGNALS_ONLY_IF_MISSING,
+      'retry' => DEFAULT_SSE_RETRY_DURATION,
+      MODE_DATALINE_LITERAL => DEFAULT_ELEMENT_PATCH_MODE,
+      USE_VIEW_TRANSITION_DATALINE_LITERAL => DEFAULT_ELEMENTS_USE_VIEW_TRANSITIONS,
+      ONLY_IF_MISSING_DATALINE_LITERAL => DEFAULT_PATCH_SIGNALS_ONLY_IF_MISSING,
     }.freeze
 
     SIGNAL_SEPARATOR = '.'
@@ -52,7 +91,7 @@ module Datastar
 
       buffer = +"event: datastar-patch-elements\n"
       build_options(options, buffer)
-      element_lines.each { |line| buffer << "data: #{Consts::ELEMENTS_DATALINE_LITERAL} #{line}\n" }
+      element_lines.each { |line| buffer << "data: #{ELEMENTS_DATALINE_LITERAL} #{line}\n" }
 
       write(buffer)
     end
@@ -61,7 +100,7 @@ module Datastar
       patch_elements(
         nil, 
         options.merge(
-          Consts::MODE_DATALINE_LITERAL => Consts::ElementPatchMode::REMOVE,
+          MODE_DATALINE_LITERAL => ElementPatchMode::REMOVE,
           selector:
         )
       )
@@ -75,7 +114,7 @@ module Datastar
         signals = JSON.dump(signals)
         buffer << "data: signals #{signals}\n"
       when String
-        multi_data_lines(signals, buffer, Consts::SIGNALS_DATALINE_LITERAL)
+        multi_data_lines(signals, buffer, SIGNALS_DATALINE_LITERAL)
       end
       write(buffer)
     end
@@ -101,8 +140,8 @@ module Datastar
       script_tag << %( data-effect="el.remove()") if auto_remove
       script_tag << ">#{script}</script>"
 
-      options[Consts::SELECTOR_DATALINE_LITERAL] = 'body'
-      options[Consts::MODE_DATALINE_LITERAL] = Consts::ElementPatchMode::APPEND
+      options[SELECTOR_DATALINE_LITERAL] = 'body'
+      options[MODE_DATALINE_LITERAL] = ElementPatchMode::APPEND
 
       patch_elements(script_tag, options)
     end
@@ -143,7 +182,7 @@ module Datastar
             buffer << "data: #{k} #{kk} #{vv}\n"
           end
         elsif v.is_a?(Array)
-          if k == Consts::SELECTOR_DATALINE_LITERAL
+          if k == SELECTOR_DATALINE_LITERAL
             buffer << "data: #{k} #{v.join(', ')}\n"
           else
             buffer << "data: #{k} #{v.join(' ')}\n"
