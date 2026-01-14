@@ -29,7 +29,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Uncomment to register a new dependency of your gem
-  spec.add_dependency 'rack', '>= 3.1.14'
+  spec.add_dependency 'rack', '>= 3.2'
   spec.add_dependency 'json'
   spec.add_dependency 'logger'
 
