@@ -5,28 +5,28 @@ require 'json'
 module Datastar
   module ElementPatchMode
     # Morphs the element into the existing element.
-    OUTER = 'outer'
+    OUTER = :outer
 
     # Replaces the inner HTML of the existing element.
-    INNER = 'inner'
+    INNER = :inner
 
     # Removes the existing element.
-    REMOVE = 'remove'
+    REMOVE = :remove
 
     # Replaces the existing element with the new element.
-    REPLACE = 'replace'
+    REPLACE = :replace
 
     # Prepends the element inside to the existing element.
-    PREPEND = 'prepend'
+    PREPEND = :prepend
 
     # Appends the element inside the existing element.
-    APPEND = 'append'
+    APPEND = :append
 
     # Inserts the element before the existing element.
-    BEFORE = 'before'
+    BEFORE = :before
 
     # Inserts the element after the existing element.
-    AFTER = 'after'
+    AFTER = :after
   end
 
   class ServerSentEventGenerator
@@ -98,7 +98,7 @@ module Datastar
 
     def remove_elements(selector, options = BLANK_OPTIONS)
       patch_elements(
-        nil, 
+        nil,
         options.merge(
           MODE_DATALINE_LITERAL => ElementPatchMode::REMOVE,
           selector:
@@ -178,7 +178,7 @@ module Datastar
           default_value = OPTION_DEFAULTS[sse_key]
           buffer << "#{sse_key}: #{v}\n" unless v == default_value
         elsif v.is_a?(Hash)
-          v.each do |kk, vv| 
+          v.each do |kk, vv|
             buffer << "data: #{k} #{kk} #{vv}\n"
           end
         elsif v.is_a?(Array)
