@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
 require 'datastar'
+require 'datastar/compressor/gzip'
+require 'datastar/compressor/brotli' rescue nil
 require 'zlib'
 
-RSpec.describe Datastar::CompressedSocket do
+RSpec.describe 'Compressor compressed sockets' do
   let(:raw_socket) { StringSocket.new }
   let(:sse_data) { "event: datastar-patch-signals\ndata: signals {\"foo\":\"bar\"}\n\n" }
 
@@ -30,7 +32,7 @@ RSpec.describe Datastar::CompressedSocket do
     end
   end
 
-  describe Datastar::CompressedSocket::Gzip do
+  describe Datastar::Compressor::Gzip::CompressedSocket do
     subject(:socket) { described_class.new(raw_socket) }
 
     it 'compresses data and decompresses to original' do
@@ -78,12 +80,12 @@ RSpec.describe Datastar::CompressedSocket do
     end
   end
 
-  describe Datastar::CompressedSocket::Brotli do
+  describe 'Datastar::Compressor::Brotli::CompressedSocket' do
     before do
       skip 'brotli gem not available' unless brotli_available?
     end
 
-    subject(:socket) { described_class.new(raw_socket) }
+    subject(:socket) { Datastar::Compressor::Brotli::CompressedSocket.new(raw_socket) }
 
     it 'compresses data and decompresses to original' do
       socket << sse_data

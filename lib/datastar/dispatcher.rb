@@ -45,9 +45,7 @@ module Datastar
       error_callback: Datastar.config.error_callback,
       finalize: Datastar.config.finalize,
       heartbeat: Datastar.config.heartbeat,
-      compression: Datastar.config.compression,
-      compression_preferred: Datastar.config.compression_preferred,
-      compression_options: Datastar.config.compression_options
+      compression: Datastar.config.compression
     )
       @on_connect = []
       @on_client_disconnect = []
@@ -73,18 +71,9 @@ module Datastar
       @heartbeat_on = false
 
       # Negotiate compression
-      @encoding = EncodingNegotiation.negotiate(
-        request,
-        preferred: compression_preferred,
-        enabled: compression
-      )
-      @compression_options = compression_options
-
-      if @encoding
-        encoding_value = @encoding == :br ? 'br' : 'gzip'
-        @response.headers['Content-Encoding'] = encoding_value
-        @response.headers['Vary'] = 'Accept-Encoding'
-      end
+      compression = CompressionConfig.build(compression) unless compression.is_a?(CompressionConfig)
+      @compressor = compression.negotiate(request)
+      @compressor.prepare_response(@response)
     end
 
     # Check if the request accepts SSE responses
@@ -383,14 +372,7 @@ module Datastar
     # @param socket [IO]
     # @return [CompressedSocket, IO]
     def wrap_socket(socket)
-      case @encoding
-      when :br
-        CompressedSocket::Brotli.new(socket, @compression_options)
-      when :gzip
-        CompressedSocket::Gzip.new(socket, @compression_options)
-      else
-        socket
-      end
+      @compressor.wrap_socket(socket)
     end
 
     # Handle errors caught during streaming
