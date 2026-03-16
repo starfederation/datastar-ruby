@@ -610,7 +610,110 @@ RSpec.describe Datastar::Dispatcher do
     end
   end
 
+  describe 'compression' do
+    it 'sets Content-Encoding: br when compression enabled and client accepts br' do
+      skip 'brotli gem not available' unless Datastar::EncodingNegotiation.brotli_available?
+
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br, gzip' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: true)
+
+      expect(dispatcher.response['Content-Encoding']).to eq('br')
+      expect(dispatcher.response['Vary']).to eq('Accept-Encoding')
+    end
+
+    it 'sets Content-Encoding: gzip when compression enabled and client accepts gzip only' do
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'gzip' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: true)
+
+      expect(dispatcher.response['Content-Encoding']).to eq('gzip')
+      expect(dispatcher.response['Vary']).to eq('Accept-Encoding')
+    end
+
+    it 'does not set Content-Encoding when compression enabled but no Accept-Encoding' do
+      request = build_request('/events')
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: true)
+
+      expect(dispatcher.response['Content-Encoding']).to be_nil
+      expect(dispatcher.response['Vary']).to be_nil
+    end
+
+    it 'does not set Content-Encoding when compression disabled' do
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br, gzip' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: false)
+
+      expect(dispatcher.response['Content-Encoding']).to be_nil
+    end
+
+    it 'streams gzip-compressed data that decompresses correctly' do
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'gzip' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: true, heartbeat: false)
+
+      dispatcher.patch_signals(foo: 'bar')
+
+      raw_socket = BinarySocket.new
+      dispatcher.response.body.call(raw_socket)
+
+      decompressed = Zlib::Inflate.new(31).inflate(raw_socket.bytes)
+      expect(decompressed).to include('datastar-patch-signals')
+      expect(decompressed).to include('"foo":"bar"')
+    end
+
+    it 'streams brotli-compressed data that decompresses correctly' do
+      skip 'brotli gem not available' unless Datastar::EncodingNegotiation.brotli_available?
+      require 'brotli'
+
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: true, heartbeat: false)
+
+      dispatcher.patch_signals(foo: 'bar')
+
+      raw_socket = BinarySocket.new
+      dispatcher.response.body.call(raw_socket)
+
+      decompressed = Brotli.inflate(raw_socket.bytes)
+      expect(decompressed).to include('datastar-patch-signals')
+      expect(decompressed).to include('"foo":"bar"')
+    end
+
+    it 'respects compression_preferred option' do
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br, gzip' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: true, compression_preferred: :gzip)
+
+      expect(dispatcher.response['Content-Encoding']).to eq('gzip')
+    end
+
+    it 'respects compression as array of enabled encodings' do
+      request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br, gzip' })
+      dispatcher = Datastar.new(request:, response:, view_context:, compression: [:gzip])
+
+      expect(dispatcher.response['Content-Encoding']).to eq('gzip')
+    end
+  end
+
   private
+
+  # Binary socket for compression tests
+  class BinarySocket
+    attr_reader :closed
+
+    def initialize
+      @buffer = String.new(encoding: Encoding::BINARY)
+      @closed = false
+    end
+
+    def <<(data)
+      @buffer << data.b
+      self
+    end
+
+    def close
+      @closed = true
+    end
+
+    def bytes
+      @buffer
+    end
+  end
 
   def build_request(path, method: 'GET', body: nil, content_type: 'application/json', accept: 'text/event-stream', headers: {})
     headers = { 

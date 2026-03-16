@@ -17,4 +17,6 @@ group :test do
   gem 'async'
   # Puma to host test server
   gem 'puma'
+  # Brotli for compression tests
+  gem 'brotli'
 end

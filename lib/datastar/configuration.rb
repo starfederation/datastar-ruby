@@ -34,7 +34,8 @@ module Datastar
     RACK_FINALIZE = ->(_view_context, response) { response.finish }
     DEFAULT_HEARTBEAT = 3
 
-    attr_accessor :executor, :error_callback, :finalize, :heartbeat, :logger
+    attr_accessor :executor, :error_callback, :finalize, :heartbeat, :logger,
+                  :compression, :compression_preferred, :compression_options
 
     def initialize
       @executor = ThreadExecutor.new
@@ -44,6 +45,9 @@ module Datastar
       @error_callback = proc do |e|
         @logger.error("#{e.class} (#{e.message}):\n#{e.backtrace.join("\n")}")
       end
+      @compression = false
+      @compression_preferred = :br
+      @compression_options = {}
     end
 
     def on_error(callable = nil, &block)

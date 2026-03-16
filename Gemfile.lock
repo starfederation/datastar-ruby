@@ -15,6 +15,7 @@ GEM
       io-event (~> 1.11)
       metrics (~> 0.12)
       traces (~> 0.18)
+    brotli (0.8.0)
     console (1.34.2)
       fiber-annotation
       fiber-local (~> 1.1)
@@ -77,6 +78,7 @@ PLATFORMS
 
 DEPENDENCIES
   async
+  brotli
   datastar!
   debug
   logger

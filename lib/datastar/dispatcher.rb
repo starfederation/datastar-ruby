@@ -44,7 +44,10 @@ module Datastar
       executor: Datastar.config.executor,
       error_callback: Datastar.config.error_callback,
       finalize: Datastar.config.finalize,
-      heartbeat: Datastar.config.heartbeat
+      heartbeat: Datastar.config.heartbeat,
+      compression: Datastar.config.compression,
+      compression_preferred: Datastar.config.compression_preferred,
+      compression_options: Datastar.config.compression_options
     )
       @on_connect = []
       @on_client_disconnect = []
@@ -68,6 +71,20 @@ module Datastar
 
       @heartbeat = heartbeat
       @heartbeat_on = false
+
+      # Negotiate compression
+      @encoding = EncodingNegotiation.negotiate(
+        request,
+        preferred: compression_preferred,
+        enabled: compression
+      )
+      @compression_options = compression_options
+
+      if @encoding
+        encoding_value = @encoding == :br ? 'br' : 'gzip'
+        @response.headers['Content-Encoding'] = encoding_value
+        @response.headers['Vary'] = 'Accept-Encoding'
+      end
     end
 
     # Check if the request accepts SSE responses
@@ -283,6 +300,7 @@ module Datastar
     # @api private
     def stream_one(streamer)
       proc do |socket|
+        socket = wrap_socket(socket)
         generator = ServerSentEventGenerator.new(socket, signals:, view_context: @view_context)
         @on_connect.each { |callable| callable.call(generator) }
         handling_sync_errors(generator, socket) do
@@ -308,6 +326,7 @@ module Datastar
       @queue ||= @executor.new_queue
 
       proc do |socket|
+        socket = wrap_socket(socket)
         signs = signals
         conn_generator = ServerSentEventGenerator.new(socket, signals: signs, view_context: @view_context)
         @on_connect.each { |callable| callable.call(conn_generator) }
@@ -357,6 +376,20 @@ module Datastar
           @executor.stop(threads) if threads
           socket.close
         end
+      end
+    end
+
+    # Wrap socket in a CompressedSocket if compression is negotiated
+    # @param socket [IO]
+    # @return [CompressedSocket, IO]
+    def wrap_socket(socket)
+      case @encoding
+      when :br
+        CompressedSocket::Brotli.new(socket, @compression_options)
+      when :gzip
+        CompressedSocket::Gzip.new(socket, @compression_options)
+      else
+        socket
       end
     end
 
