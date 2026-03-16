@@ -87,12 +87,6 @@ RSpec.describe Datastar::CompressionConfig do
     end
 
     it 'returns first compressor (preferred) when client supports both' do
-      begin
-        require 'brotli'
-      rescue LoadError
-        skip 'brotli gem not available'
-      end
-
       config = described_class.build([:br, :gzip])
       request = build_request('Accept-Encoding' => 'br, gzip')
       compressor = config.negotiate(request)
@@ -181,14 +175,6 @@ RSpec.describe Datastar::CompressionConfig do
   end
 
   describe 'Compressor::Brotli' do
-    before do
-      begin
-        require 'brotli'
-      rescue LoadError
-        skip 'brotli gem not available'
-      end
-    end
-
     subject(:compressor) { Datastar::Compressor::Brotli.new({}) }
 
     it 'has :br encoding' do

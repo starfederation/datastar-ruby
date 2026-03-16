@@ -612,8 +612,6 @@ RSpec.describe Datastar::Dispatcher do
 
   describe 'compression' do
     it 'sets Content-Encoding: br when compression enabled and client accepts br' do
-      begin; require 'brotli'; rescue LoadError; skip 'brotli gem not available'; end
-
       request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br, gzip' })
       dispatcher = Datastar.new(request:, response:, view_context:, compression: true)
 
@@ -659,8 +657,6 @@ RSpec.describe Datastar::Dispatcher do
     end
 
     it 'streams brotli-compressed data that decompresses correctly' do
-      begin; require 'brotli'; rescue LoadError; skip 'brotli gem not available'; end
-
       request = build_request('/events', headers: { 'HTTP_ACCEPT_ENCODING' => 'br' })
       dispatcher = Datastar.new(request:, response:, view_context:, compression: true, heartbeat: false)
 

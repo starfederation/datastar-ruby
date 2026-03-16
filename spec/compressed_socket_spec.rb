@@ -2,8 +2,7 @@
 
 require 'datastar'
 require 'datastar/compressor/gzip'
-require 'datastar/compressor/brotli' rescue nil
-require 'zlib'
+require 'datastar/compressor/brotli'
 
 RSpec.describe 'Compressor compressed sockets' do
   let(:raw_socket) { StringSocket.new }
@@ -80,12 +79,8 @@ RSpec.describe 'Compressor compressed sockets' do
     end
   end
 
-  describe 'Datastar::Compressor::Brotli::CompressedSocket' do
-    before do
-      skip 'brotli gem not available' unless brotli_available?
-    end
-
-    subject(:socket) { Datastar::Compressor::Brotli::CompressedSocket.new(raw_socket) }
+  describe Datastar::Compressor::Brotli::CompressedSocket do
+    subject(:socket) { described_class.new(raw_socket) }
 
     it 'compresses data and decompresses to original' do
       socket << sse_data
@@ -119,12 +114,4 @@ RSpec.describe 'Compressor compressed sockets' do
     end
   end
 
-  private
-
-  def brotli_available?
-    require 'brotli'
-    true
-  rescue LoadError
-    false
-  end
 end
