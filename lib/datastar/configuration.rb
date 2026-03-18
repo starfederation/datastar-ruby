@@ -35,6 +35,7 @@ module Datastar
     DEFAULT_HEARTBEAT = 3
 
     attr_accessor :executor, :error_callback, :finalize, :heartbeat, :logger
+    attr_reader :compression
 
     def initialize
       @executor = ThreadExecutor.new
@@ -44,6 +45,11 @@ module Datastar
       @error_callback = proc do |e|
         @logger.error("#{e.class} (#{e.message}):\n#{e.backtrace.join("\n")}")
       end
+      @compression = CompressionConfig.build(false)
+    end
+
+    def compression=(value)
+      @compression = value.is_a?(CompressionConfig) ? value : CompressionConfig.build(value)
     end
 
     def on_error(callable = nil, &block)

@@ -270,12 +270,104 @@ Datastar.configure do |config|
   config.on_error do |exception|
     Sentry.notify(exception)
   end
-  
+
   # Global heartbeat interval (or false, to disable)
-  # Can be overriden on specific instances
+  # Can be overriden on specific instances
   config.heartbeat = 0.3
+
+  # Enable compression for SSE streams (default: false)
+  # See the Compression section below for details
+  config.compression = true
 end
 ```
+
+### Compression
+
+SSE data (JSON + HTML) is highly compressible, and long-lived connections benefit significantly from compression. This SDK supports opt-in Brotli and gzip compression for SSE streams.
+
+#### Enabling compression
+
+Per-instance:
+
+```ruby
+datastar = Datastar.new(request:, response:, view_context:, compression: true)
+```
+
+Or globally:
+
+```ruby
+Datastar.configure do |config|
+  config.compression = true
+end
+```
+
+When enabled, the SDK negotiates compression with the client via the `Accept-Encoding` header and sets the appropriate `Content-Encoding` response header. If the client does not support compression, responses are sent uncompressed.
+
+#### Brotli vs gzip
+
+Brotli (`:br`) is preferred by default as it offers better compression ratios. It requires the host app to require the [`brotli`](https://github.com/miyucy/brotli) gem. Gzip uses Ruby built-in `zlib` and requires no extra dependencies.
+
+To use Brotli, add the gem to your `Gemfile`:
+
+```ruby
+gem 'brotli'
+```
+
+#### Configuration options
+
+```ruby
+Datastar.configure do |config|
+  # Enable compression (default: false)
+  # true enables both :br and :gzip (br preferred)
+  config.compression = true
+
+  # Or pass an array of encodings (first = preferred)
+  config.compression = [:br, :gzip]
+
+  # Per-encoder options via [symbol, options] pairs
+  config.compression = [[:br, { quality: 5 }], :gzip]
+end
+```
+
+You can also set these per-instance:
+
+```ruby
+datastar = Datastar.new(
+  request:, response:, view_context:,
+  compression: [:gzip]              # only gzip, no brotli
+)
+
+# Or with per-encoder options
+datastar = Datastar.new(
+  request:, response:, view_context:,
+  compression: [[:gzip, { level: 1 }]]
+)
+```
+
+#### Per-encoder options
+
+Options are passed directly to the underlying compressor via the array form. Available options depend on the encoder.
+
+**Gzip** (via `Zlib::Deflate`):
+
+| Option       | Default                     | Description                                                  |
+| ------------ | --------------------------- | ------------------------------------------------------------ |
+| `:level`     | `Zlib::DEFAULT_COMPRESSION` | Compression level (0-9). 0 = none, 1 = fastest, 9 = smallest. `Zlib::BEST_SPEED` and `Zlib::BEST_COMPRESSION` also work. |
+| `:mem_level` | `8`                         | Memory usage (1-9). Higher uses more memory for better compression. |
+| `:strategy`  | `Zlib::DEFAULT_STRATEGY`    | Algorithm strategy. Alternatives: `Zlib::FILTERED`, `Zlib::HUFFMAN_ONLY`, `Zlib::RLE`, `Zlib::FIXED`. |
+
+**Brotli** (via `Brotli::Compressor`, requires the `brotli` gem):
+
+| Option     | Default    | Description                                                  |
+| ---------- | ---------- | ------------------------------------------------------------ |
+| `:quality` | `11`       | Compression quality (0-11). Lower is faster, higher compresses better. |
+| `:lgwin`   | `22`       | Base-2 log of sliding window size (10-24).                   |
+| `:lgblock` | `0` (auto) | Base-2 log of max input block size (16-24, or 0 for auto).   |
+| `:mode`    | `:generic` | Compression mode: `:generic`, `:text`, or `:font`. `:text` is a good choice for SSE (UTF-8 HTML/JSON). |
+
+#### Proxy considerations
+
+Even with `X-Accel-Buffering: no` (set by default), some proxies like Nginx may buffer compressed responses. You may need to add `proxy_buffering off` to your Nginx configuration when using compression with SSE.
 
 ### Rendering Rails templates
 

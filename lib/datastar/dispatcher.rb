@@ -44,7 +44,8 @@ module Datastar
       executor: Datastar.config.executor,
       error_callback: Datastar.config.error_callback,
       finalize: Datastar.config.finalize,
-      heartbeat: Datastar.config.heartbeat
+      heartbeat: Datastar.config.heartbeat,
+      compression: Datastar.config.compression
     )
       @on_connect = []
       @on_client_disconnect = []
@@ -68,6 +69,11 @@ module Datastar
 
       @heartbeat = heartbeat
       @heartbeat_on = false
+
+      # Negotiate compression
+      compression = CompressionConfig.build(compression) unless compression.is_a?(CompressionConfig)
+      @compressor = compression.negotiate(request)
+      @compressor.prepare_response(@response)
     end
 
     # Check if the request accepts SSE responses
@@ -283,6 +289,7 @@ module Datastar
     # @api private
     def stream_one(streamer)
       proc do |socket|
+        socket = wrap_socket(socket)
         generator = ServerSentEventGenerator.new(socket, signals:, view_context: @view_context)
         @on_connect.each { |callable| callable.call(generator) }
         handling_sync_errors(generator, socket) do
@@ -308,6 +315,7 @@ module Datastar
       @queue ||= @executor.new_queue
 
       proc do |socket|
+        socket = wrap_socket(socket)
         signs = signals
         conn_generator = ServerSentEventGenerator.new(socket, signals: signs, view_context: @view_context)
         @on_connect.each { |callable| callable.call(conn_generator) }
@@ -358,6 +366,13 @@ module Datastar
           socket.close
         end
       end
+    end
+
+    # Wrap socket in a CompressedSocket if compression is negotiated
+    # @param socket [IO]
+    # @return [CompressedSocket, IO]
+    def wrap_socket(socket)
+      @compressor.wrap_socket(socket)
     end
 
     # Handle errors caught during streaming

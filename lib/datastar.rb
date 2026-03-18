@@ -25,6 +25,7 @@ module Datastar
 end
 
 require_relative 'datastar/configuration'
+require_relative 'datastar/compression_config'
 require_relative 'datastar/dispatcher'
 require_relative 'datastar/server_sent_event_generator'
 require_relative 'datastar/railtie' if defined?(Rails::Railtie)
