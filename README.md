@@ -13,7 +13,7 @@ gem 'datastar'
 Or point your `Gemfile` to the source
 
 ```bash
-gem 'datastar', git: 'https://github.com/starfederation/datastar', glob: 'sdk/ruby/*.gemspec'
+gem 'datastar', github: 'starfederation/datastar-ruby'
 ```
 
 ## Usage
