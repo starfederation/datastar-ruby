@@ -10,10 +10,11 @@ Gem::Specification.new do |spec|
 
   spec.summary = 'Ruby SDK for Datastar. Rack-compatible.'
   spec.homepage = 'https://github.com/starfederation/datastar-ruby#readme'
-  spec.required_ruby_version = '>= 3.0.0'
+  spec.required_ruby_version = '>= 3.3.0'
 
   spec.metadata['homepage_uri'] = spec.homepage
   spec.metadata['source_code_uri'] = 'https://github.com/starfederation/datastar-ruby'
+  spec.metadata['rubygems_mfa_required'] = 'true'
 
   # Specify which files should be added to the gem when it is released.
   # The `git ls-files -z` loads the files in the RubyGem that have been added into git.
@@ -29,9 +30,9 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Uncomment to register a new dependency of your gem
-  spec.add_dependency 'rack', '>= 3.2'
   spec.add_dependency 'json'
   spec.add_dependency 'logger'
+  spec.add_dependency 'rack', '>= 3.2'
 
   spec.add_development_dependency 'phlex'
   # For more information and examples about making a new gem, check out our
