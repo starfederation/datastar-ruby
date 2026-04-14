@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    datastar (1.0.2)
+    datastar (1.0.3)
       json
       logger
       rack (>= 3.2)
