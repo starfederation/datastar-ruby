@@ -245,6 +245,21 @@ You can also set it to a different number (in seconds)
 heartbeat: 0.5
 ```
 
+#### Per-stream override
+
+The `#stream` method also accepts a `heartbeat:` keyword that overrides the constructor-level setting for a single call. This is useful when a dispatcher is generally configured with a heartbeat but a particular response doesn't need one (e.g. a one-shot update). The previous value is restored once the call returns.
+
+```ruby
+datastar = Datastar.new(request:, response:) # default heartbeat
+
+# Disable heartbeat for this single response
+datastar.stream(heartbeat: false) do |sse|
+  sse.patch_elements(html)
+end
+```
+
+The one-shot helpers (`#patch_elements`, `#remove_elements`, `#patch_signals`, `#remove_signals`, `#execute_script`, `#redirect`) use this internally to avoid spawning a heartbeat thread for a single message.
+
 #### Manual connection check
 
 If you want to check connection status on your own, you can disable the heartbeat and use `sse.check_connection!`, which will close the connection and trigger callbacks if the client is disconnected.

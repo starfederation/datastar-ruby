@@ -498,6 +498,31 @@ RSpec.describe Datastar::Dispatcher do
       expect(block_called).to be(true)
     end
 
+    specify '#stream with per-call heartbeat: false overrides constructor heartbeat' do
+      dispatcher = Datastar.new(request:, response:, heartbeat: 0.001)
+      connected = true
+      block_called = false
+      dispatcher.on_client_disconnect { |conn| connected = false }
+
+      socket = TestSocket.new(open: false)
+
+      dispatcher.stream(heartbeat: false) do |sse|
+        sleep 0.001
+        block_called = true
+      end
+
+      dispatcher.response.body.call(socket)
+      expect(connected).to be(true)
+      expect(block_called).to be(true)
+    end
+
+    specify '#stream restores heartbeat state after a per-call override' do
+      dispatcher = Datastar.new(request:, response:, heartbeat: 0.001)
+
+      dispatcher.stream(heartbeat: false) { |sse| }
+      expect(dispatcher.heartbeat).to eq(0.001)
+    end
+
     specify '#signals' do
       request = build_request(
         %(/events), 

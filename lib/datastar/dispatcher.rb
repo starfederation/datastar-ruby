@@ -28,7 +28,7 @@ module Datastar
     HTTP_ACCEPT = 'HTTP_ACCEPT'
     HTTP1 = 'HTTP/1.1'
 
-    attr_reader :request, :response
+    attr_reader :request, :response, :heartbeat
 
     # @option request [Rack::Request] the request object
     # @option response [Rack::Response, nil] the response object
@@ -137,7 +137,7 @@ module Datastar
     # @param elements [String, #call(view_context: Object) => Object] the HTML elements or object
     # @param options [Hash] the options to send with the message
     def patch_elements(elements, options = BLANK_OPTIONS)
-      stream_no_heartbeat do |sse|
+      stream(heartbeat: false) do |sse|
         sse.patch_elements(elements, options)
       end
     end
@@ -152,7 +152,7 @@ module Datastar
     # @param selector [String] a CSS selector for the fragment to remove
     # @param options [Hash] the options to send with the message
     def remove_elements(selector, options = BLANK_OPTIONS)
-      stream_no_heartbeat do |sse|
+      stream(heartbeat: false) do |sse|
         sse.remove_elements(selector, options)
       end
     end
@@ -166,7 +166,7 @@ module Datastar
     # @param signals [Hash, String] signals to merge
     # @param options [Hash] the options to send with the message
     def patch_signals(signals, options = BLANK_OPTIONS)
-      stream_no_heartbeat do |sse|
+      stream(heartbeat: false) do |sse|
         sse.patch_signals(signals, options)
       end
     end
@@ -180,7 +180,7 @@ module Datastar
     # @param paths [Array<String>] object paths to the signals to remove
     # @param options [Hash] the options to send with the message
     def remove_signals(paths, options = BLANK_OPTIONS)
-      stream_no_heartbeat do |sse|
+      stream(heartbeat: false) do |sse|
         sse.remove_signals(paths, options)
       end
     end
@@ -194,7 +194,7 @@ module Datastar
     # @param script [String] the script to execute
     # @param options [Hash] the options to send with the message
     def execute_script(script, options = BLANK_OPTIONS)
-      stream_no_heartbeat do |sse|
+      stream(heartbeat: false) do |sse|
         sse.execute_script(script, options)
       end
     end
@@ -204,7 +204,7 @@ module Datastar
     #
     # @param url [String] the URL or path to redirect to
     def redirect(url)
-      stream_no_heartbeat do |sse|
+      stream(heartbeat: false) do |sse|
         sse.redirect(url)
       end
     end
@@ -245,10 +245,24 @@ module Datastar
     # By default, the built-in Rack finalzer just returns the resposne Array which can be used by any Rack handler.
     # On Rails, the Rails controller response is set to this objects streaming response.
     #
+    # A per-call +heartbeat:+ keyword overrides the constructor-level heartbeat
+    # for the duration of this call. Pass +false+ to disable heartbeat for a
+    # one-shot message (e.g. a single +patch_elements+), or a Numeric interval
+    # to enable it. The previous value is restored once the call returns.
+    # @example Disable heartbeat for a single response
+    #
+    #  datastar.stream(heartbeat: false) do |sse|
+    #    sse.patch_elements(html)
+    #  end
+    #
     # @param streamer [#call(ServerSentEventGenerator), nil] a callable to call with the generator
+    # @param heartbeat [Numeric, false] override the heartbeat interval for this call, or +false+ to disable
     # @yieldparam sse [ServerSentEventGenerator] the generator object
     # @return [Object] depends on the finalize callback
-    def stream(streamer = nil, &block)
+    def stream(streamer = nil, heartbeat: @heartbeat, &block)
+      heartbeat_was = @heartbeat
+      @heartbeat = heartbeat
+
       streamer ||= block
       @streamers << streamer
       if @heartbeat && !@heartbeat_on
@@ -269,17 +283,11 @@ module Datastar
 
       @response.body = body
       @finalize.call(@view_context, @response)
+    ensure
+      @heartbeat = heartbeat_was
     end
 
     private
-
-    def stream_no_heartbeat(&block)
-      was = @heartbeat
-      @heartbeat = false
-      stream(&block).tap do
-        @heartbeat = was
-      end
-    end
 
     # Produce a response body for a single stream
     # In this case, the SSE generator can write directly to the socket
