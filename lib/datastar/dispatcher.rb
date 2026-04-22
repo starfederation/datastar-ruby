@@ -56,7 +56,10 @@ module Datastar
       @queue = nil
       @executor = executor
       @view_context = view_context
-      @request = request
+      # Dup the env so that Rack middleware restores (e.g. Rack::URLMap's
+      # ensure block resetting SCRIPT_NAME/PATH_INFO after app.call returns)
+      # don't affect async stream fibers that run after the handler returns.
+      @request = Rack::Request.new(request.env.dup)
       @response = Rack::Response.new(BLANK_BODY, 200, response&.headers || {})
       @response.content_type = SSE_CONTENT_TYPE
       @response.headers['Cache-Control'] = 'no-cache'

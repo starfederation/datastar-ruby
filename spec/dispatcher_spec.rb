@@ -63,6 +63,26 @@ RSpec.describe Datastar::Dispatcher do
       request.env['SERVER_PROTOCOL'] = 'HTTP/2.0'
       expect(dispatcher.response['Connection']).to be_nil
     end
+
+    it 'wraps the request in a new Rack::Request with a duplicated env' do
+      expect(dispatcher.request).not_to equal(request)
+      expect(dispatcher.request.env).not_to equal(request.env)
+    end
+
+    it 'isolates the dispatcher from later env mutations by upstream middleware' do
+      request.env['PATH_INFO'] = '/events'
+      request.env['SCRIPT_NAME'] = '/app'
+      dispatcher = Datastar.new(request:, response:, view_context:)
+
+      # Simulate middleware such as Rack::URLMap restoring SCRIPT_NAME/PATH_INFO
+      # in an ensure block after the handler returns but while async stream
+      # fibers are still running.
+      request.env['PATH_INFO'] = '/'
+      request.env['SCRIPT_NAME'] = ''
+
+      expect(dispatcher.request.path_info).to eq('/events')
+      expect(dispatcher.request.script_name).to eq('/app')
+    end
   end
 
   specify '.from_rack_env' do
