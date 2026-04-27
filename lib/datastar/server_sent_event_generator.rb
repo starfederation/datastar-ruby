@@ -147,7 +147,16 @@ module Datastar
     end
 
     def redirect(url)
-      execute_script %(setTimeout(() => { window.location = '#{url}' }))
+      # Encode the URL as a JS string literal that's safe to embed inside <script>:
+      # - JSON.generate(..., ascii_only: true) escapes quotes, backslashes, control
+      #   chars, and U+2028/U+2029 (which are line terminators inside JS string
+      #   literals, so they break out without escaping).
+      # - escape_slash: true escapes / to \/ so a '</script>' substring in the
+      #   URL can't prematurely close the surrounding <script> tag during HTML
+      #   parsing — \/ is a no-op inside a JS string literal but the parser
+      #   doesn't recognize <\/script> as a script-end tag.
+      js_string = JSON.generate(url.to_s, ascii_only: true, escape_slash: true)
+      execute_script %(setTimeout(() => { window.location = #{js_string} }))
     end
 
     def write(buffer)
