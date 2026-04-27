@@ -859,6 +859,177 @@ RSpec.describe Datastar::Dispatcher do
     end
   end
 
+  describe 'SSE injection guards' do
+    # WHATWG SSE parser splits on \r, \n, or \r\n. Caller-supplied strings
+    # must never be able to split or forge fields no matter where they
+    # appear in the API surface.
+    BROWSER_LINE_BREAK = /\r\n|\r|\n/
+
+    def stream_lines(dispatcher)
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      socket.lines.join.split(BROWSER_LINE_BREAK)
+    end
+
+    describe '#patch_elements element body' do
+      it 'strips bare \r from element bodies' do
+        dispatcher.patch_elements("<li>safe</li>\revent: forged\ndata: elements <pwned>")
+        lines = stream_lines(dispatcher)
+
+        # Exactly one event header (the legitimate one)
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-elements'])
+        # The injected `event: forged` is now concatenated into the parent data line
+        expect(lines).to include(a_string_matching(/^data: elements .*event: forged/))
+      end
+
+      it 'preserves \n inside element bodies (used as the line splitter)' do
+        dispatcher.patch_elements("<div>\n<span>hi</span>\n</div>")
+        lines = stream_lines(dispatcher)
+        expect(lines).to include('data: elements <div>')
+        expect(lines).to include('data: elements <span>hi</span>')
+        expect(lines).to include('data: elements </div>')
+      end
+    end
+
+    describe '#patch_elements scalar option' do
+      it 'strips \r from scalar option values' do
+        dispatcher.patch_elements('<p>x</p>', selector: "#a\rinjected: evil")
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+        expect(lines).to include(a_string_matching(/^data: selector #ainjected: evil/))
+      end
+
+      it 'strips \n from scalar option values' do
+        dispatcher.patch_elements('<p>x</p>', selector: "#b\ninjected: evil")
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+        expect(lines).to include(a_string_matching(/^data: selector #binjected: evil/))
+      end
+
+      it 'strips \r\n from scalar option values' do
+        dispatcher.patch_elements('<p>x</p>', selector: "#c\r\ninjected: evil")
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+      end
+    end
+
+    describe '#patch_elements array option' do
+      it 'strips line terminators from each entry' do
+        dispatcher.patch_elements('<p>x</p>', selector: ["#a\rinjected: evil", "#b\nfoo: bar"])
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+        expect(lines).not_to include('foo: bar')
+        expect(lines.grep(/^event:/).size).to eq(1)
+      end
+    end
+
+    describe '#patch_elements hash option entries' do
+      it 'strips line terminators from hash entry values' do
+        dispatcher.patch_elements('<p>x</p>', extra: { key: "v\revent: forged" })
+        lines = stream_lines(dispatcher)
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-elements'])
+      end
+    end
+
+    describe '#patch_signals' do
+      it 'strips \r from String signal payloads' do
+        dispatcher.patch_signals("{\"a\":1}\revent: forged\ndata: signals {\"b\":2}")
+        lines = stream_lines(dispatcher)
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-signals'])
+      end
+
+      it 'safely encodes Hash signal values containing line terminators (JSON)' do
+        dispatcher.patch_signals(msg: "hi\revent: forged\nbye")
+        lines = stream_lines(dispatcher)
+        # JSON.dump produces a single safe data: signals line
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-signals'])
+        expect(lines.grep(/^data: signals/).size).to eq(1)
+      end
+
+      it 'strips line terminators from option values' do
+        dispatcher.patch_signals({ foo: 'bar' }, event_id: "1\rinjected: evil")
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+      end
+    end
+
+    describe '#remove_elements' do
+      it 'strips \r from selector' do
+        dispatcher.remove_elements("#a\rinjected: evil")
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-elements'])
+      end
+
+      it 'strips \n from each selector when given an array' do
+        dispatcher.remove_elements(["#a\ninjected: evil", "#b"])
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+      end
+    end
+
+    describe '#execute_script' do
+      it 'strips \r from the script body' do
+        dispatcher.execute_script("safe()\revent: forged\ndata: elements <pwned>")
+        lines = stream_lines(dispatcher)
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-elements'])
+      end
+
+      it 'preserves multi-line script bodies (\n is allowed in JS)' do
+        dispatcher.execute_script("a()\nb()")
+        lines = stream_lines(dispatcher)
+        # The script tag spans multiple data: elements lines, all under the same event
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-elements'])
+        expect(lines.grep(/^data: elements/).size).to be >= 2
+      end
+
+      it 'strips line terminators from attribute values so the script tag stays single-line' do
+        dispatcher.execute_script(
+          "alert('hi')",
+          attributes: { type: "text/javascript\nfoo: bar", custom: "v\rinjected: evil" }
+        )
+        lines = stream_lines(dispatcher)
+        expect(lines).not_to include('injected: evil')
+        # Tag stays on one data: elements line (no attribute-induced split)
+        expect(lines.grep(/^data: elements/).size).to eq(1)
+      end
+    end
+
+    describe '#redirect' do
+      it 'strips \r from the URL (URL ends up inside a script body)' do
+        dispatcher.redirect("/safe\revent: forged")
+        lines = stream_lines(dispatcher)
+        expect(lines.grep(/^event:/)).to eq(['event: datastar-patch-elements'])
+      end
+    end
+
+    describe 'issue #18 reproduction' do
+      it 'absorbs all CR/LF injection attempts into legitimate data: lines' do
+        # Mirrors the reproduction from the upstream issue
+        dispatcher.stream(heartbeat: false) do |sse|
+          sse.patch_elements("<li>safe</li>\revent: forged\ndata: elements <pwned>")
+          sse.patch_elements("<p>x</p>", selector: "#a\rinjected: evil")
+          sse.patch_elements("<p>x</p>", selector: "#b\ninjected: evil")
+          sse.execute_script("safe()\revent: forged\ndata: elements <pwned>")
+        end
+
+        socket = TestSocket.new
+        dispatcher.response.body.call(socket)
+        socket.wait_for_close
+
+        lines = socket.lines.join.split(BROWSER_LINE_BREAK)
+
+        # Exactly 4 legitimate event: headers (one per method call) — no forged ones
+        event_lines = lines.grep(/^event:/)
+        expect(event_lines.size).to eq(4)
+        expect(event_lines).to all(start_with('event: datastar-'))
+
+        # No standalone "injected:" field
+        expect(lines).not_to include(a_string_matching(/^injected:/))
+      end
+    end
+  end
+
   private
 
   # Binary socket for compression tests
