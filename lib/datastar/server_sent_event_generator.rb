@@ -80,9 +80,10 @@ module Datastar
     end
 
     def patch_elements(elements, options = BLANK_OPTIONS)
+      options = scrub_option(options)
       elements = Array(elements).compact
       rendered_elements = elements.map do |element|
-        render_element(element)
+        scrub_body(render_element(element))
       end
 
       element_lines = rendered_elements.flat_map do |el|
@@ -107,14 +108,17 @@ module Datastar
     end
 
     def patch_signals(signals, options = BLANK_OPTIONS)
+      options = scrub_option(options)
       buffer = +"event: datastar-patch-signals\n"
       build_options(options, buffer)
       case signals
       when Hash
+        # JSON.dump escapes \r and \n inside string values, so the
+        # serialized payload is always a single safe line.
         signals = JSON.dump(signals)
         buffer << "data: signals #{signals}\n"
       when String
-        multi_data_lines(signals, buffer, SIGNALS_DATALINE_LITERAL)
+        multi_data_lines(scrub_body(signals), buffer, SIGNALS_DATALINE_LITERAL)
       end
       write(buffer)
     end
@@ -133,11 +137,17 @@ module Datastar
       options = camelize_keys(options)
       auto_remove = options.key?('autoRemove') ? options.delete('autoRemove') : true
       attributes = options.delete('attributes') || BLANK_OPTIONS
+      # Attribute values are interpolated raw into the <script> tag and
+      # bypass patch_elements' element-body splitter, so they need both
+      # \r and \n stripped here to avoid SSE field forging and tag breakage.
+      attributes = scrub_option(attributes)
       script_tag = +"<script"
       attributes.each do |k, v|
         script_tag << %( #{camelize(k)}="#{v}")
       end
       script_tag << %( data-effect="el.remove()") if auto_remove
+      # The script body itself can legitimately contain \n (multi-line JS);
+      # patch_elements will strip \r and split on \n into per-line data: fields.
       script_tag << ">#{script}</script>"
 
       options[SELECTOR_DATALINE_LITERAL] = 'body'
@@ -167,6 +177,30 @@ module Datastar
     private
 
     attr_reader :view_context, :stream
+
+    # Strip carriage returns from element/script body strings.
+    # The browser's SSE parser treats \r, \n, and \r\n as line terminators
+    # (WHATWG html spec). Element bodies are intentionally split on \n to
+    # emit per-line `data: elements ...` fields, but bare \r would survive
+    # inside one of those lines and let attacker-controlled content forge
+    # SSE fields that the client dispatches as legitimate events.
+    def scrub_body(value)
+      return value unless value.is_a?(String)
+
+      value.delete("\r")
+    end
+
+    # Recursively strip carriage returns and newlines from option values.
+    # Option values are written as single-line `data: ...` fields by
+    # build_options, so any embedded \r or \n would forge an SSE field.
+    def scrub_option(value)
+      case value
+      when String then value.delete("\r\n")
+      when Array  then value.map { |v| scrub_option(v) }
+      when Hash   then value.transform_values { |v| scrub_option(v) }
+      else value
+      end
+    end
 
     # Support Phlex components
     # And Rails' #render_in interface
