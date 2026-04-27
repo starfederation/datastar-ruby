@@ -2,34 +2,47 @@ name: Test Ruby Gem with Rack App
 
 on:
   push:
+  pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby:
+          - '3.1'
+          - '3.2'
+          - '3.3'
+          - '3.4'
+          - '4.0'
+
+    name: Ruby ${{ matrix.ruby }}
+
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Ruby
+
+    - name: Set up Ruby ${{ matrix.ruby }}
       uses: ruby/setup-ruby@v1
       with:
-        ruby-version: '4.0'
+        ruby-version: ${{ matrix.ruby }}
         bundler-cache: true
-    
+
     - name: Run unit tests
       run: bundle exec rspec
-    
+
     - name: Start Rack test app
       run: |
         # Start the test app in background on port 8000
         bundle exec puma -p 8000 examples/test.ru &
-        
+
         # Store the PID for cleanup
         echo $! > rack_app.pid
-        
+
         # Wait for the app to start
         sleep 3
-        
+
         # Verify the app is running
         curl -f http://localhost:8000/ || (echo "App failed to start" && exit 1)
 
@@ -48,7 +61,7 @@ jobs:
 
     - name: Run SDK tests against test server
       working-directory: datastar/sdk/tests
-      run: go run ./cmd/datastar-sdk-tests -server http://localhost:8000 
+      run: go run ./cmd/datastar-sdk-tests -server http://localhost:8000
 
     - name: Cleanup
       if: always()
