@@ -274,6 +274,22 @@ RSpec.describe Datastar::Dispatcher do
         %(data: signals }),
       ])
     end
+
+    # Pre-fix the case/when branch had no else, so non-Hash/non-String inputs
+    # silently produced an empty event (just the event: header, no data: line).
+    # The Dispatcher docstring already declares the contract: signals [Hash, String].
+    [
+      ['nil',     nil],
+      ['Array',   [1, 2, 3]],
+      ['Integer', 42],
+      ['Symbol',  :foo],
+    ].each do |label, value|
+      it "raises ArgumentError when signals is #{label}" do
+        sse = Datastar::ServerSentEventGenerator.new(StringIO.new, signals: {})
+        expect { sse.patch_signals(value) }
+          .to raise_error(ArgumentError, /Hash or a JSON-encoded String/)
+      end
+    end
   end
 
   describe '#remove_signals' do
