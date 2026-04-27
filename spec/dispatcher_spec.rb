@@ -349,7 +349,80 @@ RSpec.describe Datastar::Dispatcher do
       socket = TestSocket.new
       dispatcher.response.body.call(socket)
       expect(socket.open).to be(false)
-      expect(socket.lines).to eq([%(event: datastar-patch-elements\ndata: selector body\ndata: mode append\ndata: elements <script data-effect="el.remove()">setTimeout(() => { window.location = '/guide' })</script>\n\n)])
+      expect(socket.lines).to eq([%(event: datastar-patch-elements\ndata: selector body\ndata: mode append\ndata: elements <script data-effect="el.remove()">setTimeout(() => { window.location = "\\/guide" })</script>\n\n)])
+    end
+
+    it 'wraps single quotes inside a double-quoted JS string literal so they cannot break out' do
+      # Pre-fix: window.location = '/foo'); alert(1); ('';
+      #   → the ' in the URL closed the JS string and ); alert(1); ( ran as JS (XSS).
+      # Post-fix: window.location = "/foo'); alert(1); ('"
+      #   → JSON.generate emits a double-quoted literal; ' has no special meaning
+      #     inside ", so the breakout payload is harmless content of the URL value.
+      dispatcher.redirect("/foo'); alert(1); ('")
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      output = socket.lines.join
+
+      # The breakout payload appears as inert string content of the URL
+      # (leading / is escape_slashed to \/, harmless in JS)
+      expect(output).to include(%[window.location = "\\/foo'); alert(1); ('"])
+      # The wrapping <script>…</script> stays balanced — no premature close
+      expect(output.scan('<script').size).to eq(1)
+      expect(output.scan('</script>').size).to eq(1)
+    end
+
+    it 'JS-escapes double quotes in URL' do
+      dispatcher.redirect('/foo"); alert(1); ("')
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      output = socket.lines.join
+
+      expect(output).not_to include('"); alert(1); ("')
+      expect(output).to include('\\"')
+    end
+
+    it 'JS-escapes backslashes in URL' do
+      dispatcher.redirect('/foo\\"); alert(1); //')
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      output = socket.lines.join
+
+      # The literal sequence "); from the payload must not appear unescaped
+      expect(output).not_to include('"); alert(1); //')
+    end
+
+    it 'escapes </script> so it cannot prematurely close the surrounding <script> tag' do
+      dispatcher.redirect('/foo</script><script>alert(1)</script>')
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      output = socket.lines.join
+
+      # The wrapping <script>...</script> stays intact: only one closing tag,
+      # at the very end. The injected </script><script>alert(1)</script>
+      # becomes <\/script><script>alert(1)<\/script> inside the JS string.
+      expect(output).not_to match(%r{</script><script>alert\(1\)})
+      expect(output.scan('</script>').size).to eq(1)
+    end
+
+    it 'escapes U+2028 line separator (a JS string-literal terminator)' do
+      dispatcher.redirect("/foo bar")
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      output = socket.lines.join
+
+      # Must be escaped to   so the JS string literal stays intact
+      expect(output).to include('\\u2028')
+      expect(output).not_to include(" ")
+    end
+
+    it 'escapes U+2029 paragraph separator (also a JS string-literal terminator)' do
+      dispatcher.redirect("/foo bar")
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      output = socket.lines.join
+
+      expect(output).to include('\\u2029')
+      expect(output).not_to include(" ")
     end
   end
 
