@@ -115,6 +115,9 @@ module Datastar
         buffer << "data: signals #{signals}\n"
       when String
         multi_data_lines(signals, buffer, SIGNALS_DATALINE_LITERAL)
+      else
+        raise ArgumentError,
+              "patch_signals expects a Hash or a JSON-encoded String, got #{signals.class}"
       end
       write(buffer)
     end
