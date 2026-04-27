@@ -730,6 +730,62 @@ RSpec.describe Datastar::Dispatcher do
     end
   end
 
+  describe ':generator_class' do
+    it 'defaults to Datastar::ServerSentEventGenerator' do
+      expect(Datastar::ServerSentEventGenerator).to receive(:new).and_call_original
+
+      dispatcher = Datastar.new(request:, response:, view_context:)
+      dispatcher.patch_signals(foo: 'bar')
+
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+    end
+
+    it 'instantiates the provided class for one-off responses (stream_one)' do
+      custom = Class.new(Datastar::ServerSentEventGenerator)
+      expect(custom).to receive(:new).and_call_original
+
+      dispatcher = Datastar.new(request:, response:, view_context:, generator_class: custom)
+      dispatcher.patch_signals(foo: 'bar')
+
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+    end
+
+    it 'instantiates the provided class for every concurrent stream and the connection generator (stream_many)' do
+      custom = Class.new(Datastar::ServerSentEventGenerator)
+      # 1 connection generator + 2 per-stream generators = 3
+      expect(custom).to receive(:new).at_least(3).times.and_call_original
+
+      dispatcher = Datastar.new(request:, response:, view_context:, generator_class: custom, heartbeat: false)
+      dispatcher.stream { |sse| sse.patch_signals(foo: 1) }
+      dispatcher.stream { |sse| sse.patch_signals(bar: 2) }
+
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      socket.wait_for_close
+    end
+
+    it 'lets a subclass observe every event written to the stream' do
+      observed = []
+      custom = Class.new(Datastar::ServerSentEventGenerator) do
+        define_method(:write) do |buffer|
+          observed << buffer.dup
+          super(buffer)
+        end
+      end
+
+      dispatcher = Datastar.new(request:, response:, view_context:, generator_class: custom)
+      dispatcher.patch_signals(foo: 'bar')
+
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+
+      expect(observed.size).to eq(1)
+      expect(observed.first).to include('datastar-patch-signals')
+    end
+  end
+
   private
 
   # Binary socket for compression tests
