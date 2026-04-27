@@ -50,6 +50,59 @@ module DispatcherExamples
       expect(errs.first).to be_a(ArgumentError)
       Thread.report_on_exception = true
     end
+
+    # Mutually-exclusive callback contract — matches stream_one's
+    # handling_sync_errors semantics: per stream lifecycle, exactly one
+    # of on_server_disconnect / on_client_disconnect / on_error fires.
+    it 'does not fire on_server_disconnect when a streamer raises (multi-stream)' do
+      Thread.report_on_exception = false
+      events = []
+
+      dispatcher = Datastar
+                    .new(request:, response:, executor:)
+                    .on_server_disconnect { |_| events << :server_disconnect }
+                    .on_error { |_| events << :error }
+
+      dispatcher.stream do |sse|
+        sleep 0.01
+        raise ArgumentError, 'boom'
+      end
+
+      dispatcher.stream do |sse|
+        sse.patch_signals(foo: 'bar')
+      end
+
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      socket.wait_for_close
+      expect(events).to include(:error)
+      expect(events).not_to include(:server_disconnect)
+      Thread.report_on_exception = true
+    end
+
+    it 'does not fire on_server_disconnect when client disconnects mid-stream (multi-stream)' do
+      events = []
+
+      dispatcher = Datastar
+                    .new(request:, response:, executor:)
+                    .on_server_disconnect { |_| events << :server_disconnect }
+                    .on_client_disconnect { |_| events << :client_disconnect }
+
+      dispatcher.stream do |sse|
+        sse.patch_signals(foo: 'bar')
+      end
+
+      dispatcher.stream do |sse|
+        sse.patch_signals(bar: 'baz')
+      end
+
+      # open: false → first socket.<< raises Errno::EPIPE, simulating client gone
+      socket = TestSocket.new(open: false)
+      dispatcher.response.body.call(socket)
+      socket.wait_for_close
+      expect(events).to include(:client_disconnect)
+      expect(events).not_to include(:server_disconnect)
+    end
   end
 end
 
