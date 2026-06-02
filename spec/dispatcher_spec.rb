@@ -127,6 +127,50 @@ RSpec.describe Datastar::Dispatcher do
       expect(socket.lines).to eq([%(event: datastar-patch-elements\nid: 72\nretry: 2000\ndata: useViewTransition true\ndata: elements <div id="foo">\ndata: elements <span>hello</span>\ndata: elements </div>\n\n)])
     end
 
+    it 'takes a viewTransitionSelector option' do
+      dispatcher.patch_elements(
+        %(<div id="foo">\n<span>hello</span>\n</div>),
+        view_transition_selector: '#main',
+      )
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      expect(socket.open).to be(false)
+      expect(socket.lines).to eq([%(event: datastar-patch-elements\ndata: viewTransitionSelector #main\ndata: elements <div id="foo">\ndata: elements <span>hello</span>\ndata: elements </div>\n\n)])
+    end
+
+    it 'omits viewTransitionSelector if using default value' do
+      dispatcher.patch_elements(
+        %(<div id="foo">\n<span>hello</span>\n</div>),
+        view_transition_selector: '',
+      )
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      expect(socket.open).to be(false)
+      expect(socket.lines).to eq([%(event: datastar-patch-elements\ndata: elements <div id="foo">\ndata: elements <span>hello</span>\ndata: elements </div>\n\n)])
+    end
+
+    it 'takes a namespace option' do
+      dispatcher.patch_elements(
+        %(<div id="foo">\n<span>hello</span>\n</div>),
+        namespace: 'svg',
+      )
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      expect(socket.open).to be(false)
+      expect(socket.lines).to eq([%(event: datastar-patch-elements\ndata: namespace svg\ndata: elements <div id="foo">\ndata: elements <span>hello</span>\ndata: elements </div>\n\n)])
+    end
+
+    it 'omits namespace if using default value' do
+      dispatcher.patch_elements(
+        %(<div id="foo">\n<span>hello</span>\n</div>),
+        namespace: 'html',
+      )
+      socket = TestSocket.new
+      dispatcher.response.body.call(socket)
+      expect(socket.open).to be(false)
+      expect(socket.lines).to eq([%(event: datastar-patch-elements\ndata: elements <div id="foo">\ndata: elements <span>hello</span>\ndata: elements </div>\n\n)])
+    end
+
     it 'omits retry if using default value' do
       dispatcher.patch_elements(
         %(<div id="foo">\n<span>hello</span>\n</div>\n),
