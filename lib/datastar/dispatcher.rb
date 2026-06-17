@@ -330,6 +330,11 @@ module Datastar
         signs = signals
         conn_generator = ServerSentEventGenerator.new(socket, signals: signs, view_context: @view_context)
         @on_connect.each { |callable| callable.call(conn_generator) }
+        # Track terminal state so on_server_disconnect fires only on normal
+        # completion — matches stream_one's mutually-exclusive callback contract
+        # (one of on_server_disconnect / on_client_disconnect / on_error per
+        # stream lifecycle, never combinations).
+        completed_normally = true
 
         threads = @streamers.map do |streamer|
           duped_signals = signs.dup.freeze
@@ -357,6 +362,7 @@ module Datastar
               done_count += 1
               @queue << nil if done_count == threads_size
             elsif data.is_a?(Exception)
+              completed_normally = false
               handle_streaming_error(data, socket)
               @queue << nil
             else
@@ -365,6 +371,7 @@ module Datastar
               begin
                 socket << data
               rescue Exception => e
+                completed_normally = false
                 handle_streaming_error(e, socket)
                 @queue << nil
               end
@@ -372,7 +379,7 @@ module Datastar
           end
 
         ensure
-          @on_server_disconnect.each { |callable| callable.call(conn_generator) }
+          @on_server_disconnect.each { |callable| callable.call(conn_generator) } if completed_normally
           @executor.stop(threads) if threads
           socket.close
         end
