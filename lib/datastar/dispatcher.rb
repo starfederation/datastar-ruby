@@ -37,6 +37,9 @@ module Datastar
     # @option error_callback [Proc] the callback to call when an error occurs
     # @option finalize [Proc] the callback to call when the response is finalized
     # @option heartbeat [Integer, nil, FalseClass] the heartbeat interval in seconds
+    # @option generator_class [Class] the generator class instantiated for each stream;
+    #   defaults to {ServerSentEventGenerator}. Pass a subclass to layer behavior
+    #   (logging, metrics, input scrubbing, etc.) without monkey-patching.
     def initialize(
       request:,
       response: nil,
@@ -45,7 +48,8 @@ module Datastar
       error_callback: Datastar.config.error_callback,
       finalize: Datastar.config.finalize,
       heartbeat: Datastar.config.heartbeat,
-      compression: Datastar.config.compression
+      compression: Datastar.config.compression,
+      generator_class: ServerSentEventGenerator
     )
       @on_connect = []
       @on_client_disconnect = []
@@ -56,6 +60,7 @@ module Datastar
       @queue = nil
       @executor = executor
       @view_context = view_context
+      @generator_class = generator_class
       # Dup the env so that Rack middleware restores (e.g. Rack::URLMap's
       # ensure block resetting SCRIPT_NAME/PATH_INFO after app.call returns)
       # don't affect async stream fibers that run after the handler returns.
@@ -301,7 +306,7 @@ module Datastar
     def stream_one(streamer)
       proc do |socket|
         socket = wrap_socket(socket)
-        generator = ServerSentEventGenerator.new(socket, signals:, view_context: @view_context)
+        generator = @generator_class.new(socket, signals:, view_context: @view_context)
         @on_connect.each { |callable| callable.call(generator) }
         handling_sync_errors(generator, socket) do
           streamer.call(generator)
@@ -328,14 +333,14 @@ module Datastar
       proc do |socket|
         socket = wrap_socket(socket)
         signs = signals
-        conn_generator = ServerSentEventGenerator.new(socket, signals: signs, view_context: @view_context)
+        conn_generator = @generator_class.new(socket, signals: signs, view_context: @view_context)
         @on_connect.each { |callable| callable.call(conn_generator) }
 
         threads = @streamers.map do |streamer|
           duped_signals = signs.dup.freeze
           @executor.spawn do
             # TODO: Review thread-safe view context
-            generator = ServerSentEventGenerator.new(@queue, signals: duped_signals, view_context: @view_context)
+            generator = @generator_class.new(@queue, signals: duped_signals, view_context: @view_context)
             streamer.call(generator)
             @queue << :done
           rescue StandardError => e
