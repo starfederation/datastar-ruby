@@ -33,6 +33,18 @@ class TestSocket
   end
 end
 
+# A server-side wrapper around the socket error, as raised by e.g.
+# protocol-http1 >= 0.41 (Protocol::HTTP::RemoteError from a rescue Errno::EPIPE).
+class WrappedDisconnectError < StandardError; end
+
+class WrappingTestSocket < TestSocket
+  def <<(line)
+    super
+  rescue Errno::EPIPE
+    raise WrappedDisconnectError, 'Remote connection closed during flush!'
+  end
+end
+
 RSpec.describe Datastar::Dispatcher do
   include DispatcherExamples
 
@@ -633,6 +645,43 @@ RSpec.describe Datastar::Dispatcher do
       dispatcher.response.body.call(socket)
       socket.wait_for_close
       expect(events).to eq([true, false])
+    end
+
+    specify '#on_client_disconnect when the server wraps the socket error' do
+      events = []
+      errors = []
+      dispatcher
+        .on_client_disconnect { |conn| events << :disconnect }
+        .on_error { |err| errors << err }
+
+      dispatcher.stream do |sse|
+        sse.patch_signals(foo: 'bar')
+      end
+      socket = WrappingTestSocket.new(open: false)
+
+      dispatcher.response.body.call(socket)
+      socket.wait_for_close
+      expect(events).to eq([:disconnect])
+      expect(errors).to eq([])
+    end
+
+    specify 'concurrent streams: #on_client_disconnect when the server wraps the socket error' do
+      dispatcher = Datastar.new(request:, response:, heartbeat: 0.001)
+      events = []
+      errors = []
+      dispatcher
+        .on_client_disconnect { |conn| events << :disconnect }
+        .on_error { |err| errors << err }
+
+      dispatcher.stream do |sse|
+        sleep 10
+      end
+      socket = WrappingTestSocket.new(open: false)
+
+      dispatcher.response.body.call(socket)
+      socket.wait_for_close
+      expect(events).to eq([:disconnect])
+      expect(errors).to eq([])
     end
 
     specify '#check_connection triggers #on_client_disconnect' do

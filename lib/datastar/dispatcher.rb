@@ -386,14 +386,33 @@ module Datastar
       @compressor.wrap_socket(socket)
     end
 
+    # Errors raised when writing to a socket the client has closed.
+    DISCONNECT_ERRORS = [IOError, Errno::EPIPE, Errno::ECONNRESET].freeze
+
+    # Whether an error means the client went away.
+    #
+    # Servers may wrap the underlying socket error in their own class
+    # (e.g. protocol-http1 >= 0.41 raises +Protocol::HTTP::RemoteError+
+    # from a +rescue Errno::EPIPE+), so the +cause+ chain is checked too.
+    #
+    # @param error [Exception]
+    # @return [Boolean]
+    def client_disconnect?(error)
+      while error
+        return true if DISCONNECT_ERRORS.any? { |klass| error.is_a?(klass) }
+
+        error = error.cause
+      end
+      false
+    end
+
     # Handle errors caught during streaming
     # @param error [Exception] the error that occurred
     # @param socket [IO] the socket to pass to error handlers
     def handle_streaming_error(error, socket)
-      case error
-      when IOError, Errno::EPIPE, Errno::ECONNRESET
+      if client_disconnect?(error)
         @on_client_disconnect.each { |callable| callable.call(socket) }
-      when Exception
+      else
         @on_error.each { |callable| callable.call(error) }
       end
     end
@@ -407,10 +426,8 @@ module Datastar
       yield
 
       @on_server_disconnect.each { |callable| callable.call(generator) }
-    rescue IOError, Errno::EPIPE, Errno::ECONNRESET => e
-      @on_client_disconnect.each { |callable| callable.call(socket) }
     rescue Exception => e
-      @on_error.each { |callable| callable.call(e) }
+      handle_streaming_error(e, socket)
     end
 
     # Parse signals from the request
